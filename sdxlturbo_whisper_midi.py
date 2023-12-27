@@ -3,6 +3,7 @@
 
 #%%
 from diffusers import AutoPipelineForText2Image, AutoPipelineForImage2Image, StableDiffusionXLControlNetPipeline
+from custom_pipe_controlnet import call_custom
 import torch
 import time
 from diffusers import AutoencoderTiny
@@ -31,7 +32,7 @@ use_ctrlnet = True
 compile_with_sfast = False
 shape_cam=(600,800)
 size_diff_img = (512, 512) 
-
+num_inference_steps = 2
 # %% INITS
 cam = lt.WebCam(cam_id=0, shape_hw=shape_cam)
 cam.cam.set(cv2.CAP_PROP_AUTOFOCUS, 1)
@@ -179,11 +180,13 @@ fps = 5
 
 currently_recording_vid = False
 
-
+# pipe hack
+pipe.last_down_block_res_samples = [None]*num_inference_steps
+pipe.last_mid_block_res_sample = [None]*num_inference_steps
 
 while True:
     torch.manual_seed(420)
-    num_inference_steps = int(akai_lpd8.get("H1", val_min=2, val_max=5, val_default=2))
+    
     controlnet_conditioning_scale = akai_lpd8.get("E0", val_min=0, val_max=1, val_default=0.5)
     
     do_record_mic = akai_lpd8.get("A0", button_mode="is_pressed")
@@ -238,9 +241,12 @@ while True:
     guidance_scale = 0.0
     t0 = time.time()
     if use_ctrlnet:
+        averaging_weight = 1- akai_lpd8.get("E1", val_default=0)
         ctrl_img_prev =  ctrl_img.copy()   
         ctrl_img = get_ctrl_img(cam_img, ctrlnet_type, low_threshold=low_threshold, high_threshold=high_threshold)
-        image_diffusion = pipe(image=ctrl_img, latents=latents, controlnet_conditioning_scale=controlnet_conditioning_scale, guidance_scale=guidance_scale, num_inference_steps=num_inference_steps, prompt_embeds=prompt_embeds, negative_prompt_embeds=negative_prompt_embeds, pooled_prompt_embeds=pooled_prompt_embeds, negative_pooled_prompt_embeds=negative_pooled_prompt_embeds).images[0]
+        pipe, image_diffusion = call_custom(pipe, averaging_weight=averaging_weight, image=ctrl_img, latents=latents, controlnet_conditioning_scale=controlnet_conditioning_scale, guidance_scale=guidance_scale, num_inference_steps=num_inference_steps, prompt_embeds=prompt_embeds, negative_prompt_embeds=negative_prompt_embeds, pooled_prompt_embeds=pooled_prompt_embeds, negative_pooled_prompt_embeds=negative_pooled_prompt_embeds)
+        image_diffusion = image_diffusion.images[0]
+        # image_diffusion = pipe(image=ctrl_img, latents=latents, controlnet_conditioning_scale=controlnet_conditioning_scale, guidance_scale=guidance_scale, num_inference_steps=num_inference_steps, prompt_embeds=prompt_embeds, negative_prompt_embeds=negative_prompt_embeds, pooled_prompt_embeds=pooled_prompt_embeds, negative_pooled_prompt_embeds=negative_pooled_prompt_embeds).images[0]
     else:
         image_diffusion = pipe(image=cam_img, latents=latents, num_inference_steps=num_inference_steps, strength=0.9999, guidance_scale=guidance_scale, prompt_embeds=prompt_embeds, negative_prompt_embeds=negative_prompt_embeds, pooled_prompt_embeds=pooled_prompt_embeds, negative_pooled_prompt_embeds=negative_pooled_prompt_embeds, generator=generator).images[0]
     dt = time.time() - t0
@@ -249,7 +255,6 @@ while True:
     
     stitch_cam = akai_lpd8.get("D0", button_mode="toggle")
     show_ctrlnet_img = akai_lpd8.get("D1", button_mode="toggle")
-    
     
     if stitch_cam:
         if show_ctrlnet_img and use_ctrlnet:
@@ -295,12 +300,15 @@ while True:
 
 
 
+#%%
 
 
 
 
 
-# #%%
+
+#%%
+
 # from torch.optim import Adam
 
 # latents_prev = pipe(image=ctrl_img_prev, latents=latents, controlnet_conditioning_scale=controlnet_conditioning_scale, guidance_scale=guidance_scale, num_inference_steps=num_inference_steps, prompt_embeds=prompt_embeds, negative_prompt_embeds=negative_prompt_embeds, pooled_prompt_embeds=pooled_prompt_embeds, negative_pooled_prompt_embeds=negative_pooled_prompt_embeds, generator=generator, output_type='latent')[0]
@@ -332,7 +340,7 @@ while True:
 
 
 
-# #%%
+ #%%
 # diff_best = 1
 # image_diffusion_base = image_diffusion.copy()
 # #%%
