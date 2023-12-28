@@ -90,9 +90,8 @@ def interpolate_linear(list0, list1, fract_mixing):
     w1 = fract_mixing
     w2 = 1 - w1
     for i in range(len(list0)):
-        for j in range(len(list0[i])):
-            weighted_avg = (list0[i][j] * w1) + (list1[i][j] * w2)
-            list1[i][j] = weighted_avg
+        weighted_avg = (list0[i] * w1) + (list1[i] * w2)
+        list1[i] = weighted_avg
     return list1
 
 @torch.no_grad()
@@ -412,7 +411,6 @@ def call_custom(
 
             # pipe hack
             if self.last_down_block_res_samples[i] is not None:
-                
                 down_block_res_samples = interpolate_linear(down_block_res_samples, self.last_down_block_res_samples[i], averaging_weight)
                 mid_block_res_sample = interpolate_linear(mid_block_res_sample, self.last_mid_block_res_sample[i], averaging_weight)
                 
